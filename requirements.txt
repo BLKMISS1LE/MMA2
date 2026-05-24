@@ -1,0 +1,4 @@
+kivy
+plyer
+requests
+pypdf

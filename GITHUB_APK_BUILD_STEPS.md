@@ -1,44 +1,62 @@
-# Build the Android APK without WSL
+name: Build Android APK
 
-This project includes a GitHub Actions workflow that builds the APK for you in the cloud.
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
 
-## One-time setup
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
 
-1. Go to https://github.com and sign in.
-2. Click **New repository**.
-3. Name it something like `meijer-receipt-mobile`.
-4. Choose **Private** if you do not want anyone else to see it.
-5. Click **Create repository**.
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
 
-## Upload this project
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
 
-1. Open the new repository on GitHub.
-2. Click **Add file** → **Upload files**.
-3. Drag everything inside this folder into GitHub, including:
-   - `main.py`
-   - `meijer_receipt_formatter.py`
-   - `buildozer.spec`
-   - `.github/workflows/build-android-apk.yml`
-4. Click **Commit changes**.
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
 
-## Build the APK
+      - name: Install system dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y             git zip unzip python3-pip python3-venv             autoconf libtool pkg-config zlib1g-dev             libncurses5-dev libncursesw5-dev libtinfo6             cmake libffi-dev libssl-dev automake autopoint gettext
 
-1. Open the repository.
-2. Click the **Actions** tab.
-3. Click **Build Android APK** on the left.
-4. Click **Run workflow**.
-5. Click the green **Run workflow** button.
-6. Wait for the build to finish.
+      - name: Install Buildozer
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install buildozer cython==0.29.36
 
-## Download the APK
+      - name: Show build config
+        run: |
+          grep -n "^requirements\|^android\.api\|^android\.minapi\|^android\.ndk\|^android\.arch" buildozer.spec || true
 
-1. Open the completed workflow run.
-2. Scroll to **Artifacts**.
-3. Download `meijer-receipt-splitter-debug-apk`.
-4. Unzip it.
-5. Send the `.apk` file to your Android phone.
-6. Tap the APK on your phone and allow **Install unknown apps** if Android asks.
+      - name: Build debug APK
+        run: |
+          buildozer -v android debug
 
-## If the build fails
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: meijer-receipt-splitter-debug-apk
+          path: bin/*.apk
+          if-no-files-found: error
 
-Open the failed workflow run, click the failed step, and copy the red error text. Paste it into ChatGPT and ask for a fix.
+      - name: Upload Buildozer logs if build failed
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: buildozer-failure-logs
+          path: |
+            .buildozer/**/*.log
+            .buildozer/android/platform/python-for-android/**/*.log
+            .buildozer/android/platform/build-*/build.log
+          if-no-files-found: ignore
